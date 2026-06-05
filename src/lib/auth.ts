@@ -35,14 +35,20 @@ export async function registerUser(
       ? "super_admin"
       : "user";
 
+  // Updated user document creation
   await setDoc(doc(db, "users", credential.user.uid), {
     uid: credential.user.uid,
     email,
     fullName,
     role,
+    avatarUrl: null,
+    phoneNumber: null,
+    city: null,
+    state: null,
+    bankAccount: null,
+    isDisabled: false,
     createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    isDisabled: false
+    updatedAt: serverTimestamp()
   });
 
   return credential;
