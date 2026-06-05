@@ -5,31 +5,18 @@ import { useRouter } from "next/navigation";
 
 import AuthCard from "@/components/auth-card";
 
-import {
-  registerUser
-} from "@/lib/auth";
+import { registerUser, createServerSessionForCurrentUser } from "@/lib/auth";
 
 export default function RegisterPage() {
   const router = useRouter();
 
-  const [fullName, setFullName] =
-    useState("");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const [email, setEmail] =
-    useState("");
-
-  const [password, setPassword] =
-    useState("");
-
-  const [loading, setLoading] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
-
-  async function handleSubmit(
-    e: React.FormEvent
-  ) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
     setLoading(true);
@@ -42,11 +29,12 @@ export default function RegisterPage() {
         password
       );
 
+      await createServerSessionForCurrentUser();
+
       router.push("/dashboard");
     } catch (err: any) {
       setError(
-        err?.message ??
-          "Failed to create account"
+        err?.message ?? "Failed to create account"
       );
     } finally {
       setLoading(false);
@@ -71,11 +59,7 @@ export default function RegisterPage() {
             <input
               required
               value={fullName}
-              onChange={(e) =>
-                setFullName(
-                  e.target.value
-                )
-              }
+              onChange={(e) => setFullName(e.target.value)}
               className="w-full rounded-xl border p-3 outline-none"
             />
           </div>
@@ -89,11 +73,7 @@ export default function RegisterPage() {
               type="email"
               required
               value={email}
-              onChange={(e) =>
-                setEmail(
-                  e.target.value
-                )
-              }
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-xl border p-3 outline-none"
             />
           </div>
@@ -108,11 +88,7 @@ export default function RegisterPage() {
               required
               minLength={8}
               value={password}
-              onChange={(e) =>
-                setPassword(
-                  e.target.value
-                )
-              }
+              onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-xl border p-3 outline-none"
             />
           </div>
@@ -127,16 +103,12 @@ export default function RegisterPage() {
             disabled={loading}
             className="w-full rounded-xl bg-slate-900 px-4 py-3 font-medium text-white"
           >
-            {loading
-              ? "Creating Account..."
-              : "Create Account"}
+            {loading ? "Creating Account..." : "Create Account"}
           </button>
 
           <button
             type="button"
-            onClick={() =>
-              router.push("/login")
-            }
+            onClick={() => router.push("/login")}
             className="w-full rounded-xl border px-4 py-3"
           >
             Login Instead
