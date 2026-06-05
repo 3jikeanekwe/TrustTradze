@@ -1,12 +1,441 @@
-// Firestore security rules will come in Stage 2.
-// This file is included here so the repo already has the production structure.
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Locked down in Stage 2 with auth + role-based access.
-    match /{document=**} {
-      allow read, write: if false;
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function authEmail() {
+      return signedIn() ? request.auth.token.email : null;
+    }
+
+    function superAdminEmail() {
+      return "nkpogwuofficial@gmail.com";
+    }
+
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function hasUserDoc(uid) {
+      return exists(userPath(uid));
+    }
+
+    function userData(uid) {
+      return get(userPath(uid)).data;
+    }
+
+    function isActive(uid) {
+      return hasUserDoc(uid) && userData(uid).isDisabled == false;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function currentRole() {
+      return hasUserDoc(request.auth.uid) ? userData(request.auth.uid).role : null;
+    }
+
+    function isAdmin() {
+      return signedIn() && (currentRole() == "admin" || currentRole() == "super_admin");
+    }
+
+    function isSuperAdmin() {
+      return signedIn() && currentRole() == "super_admin";
+    }
+
+    function immutableUserFieldsMatch() {
+      return request.resource.data.uid == resource.data.uid
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.role == resource.data.role;
+    }
+
+    function adminImmutableUserFieldsMatch() {
+      return request.resource.data.uid == resource.data.uid
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    match /users/{uid} {
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly([
+          "uid",
+          "email",
+          "fullName",
+          "role",
+          "avatarUrl",
+          "phoneNumber",
+          "city",
+          "state",
+          "bankAccount",
+          "isDisabled",
+          "createdAt",
+          "updatedAt"
+        ])
+        && request.resource.data.uid == uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.fullName is string
+        && request.resource.data.avatarUrl == null
+        && request.resource.data.phoneNumber == null
+        && request.resource.data.city == null
+        && request.resource.data.state == null
+        && request.resource.data.bankAccount == null
+        && request.resource.data.isDisabled == false
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp
+        && (
+          (authEmail() == superAdminEmail() && request.resource.data.role == "super_admin")
+          || (authEmail() != superAdminEmail() && request.resource.data.role == "user")
+        );
+
+      allow read: if signedIn() && (
+        uid == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow update: if signedIn() && (
+        (
+          isSelf(uid) &&
+          isActive(uid) &&
+          immutableUserFieldsMatch() &&
+          request.resource.data.keys().hasOnly([
+            "uid",
+            "email",
+            "fullName",
+            "role",
+            "avatarUrl",
+            "phoneNumber",
+            "city",
+            "state",
+            "bankAccount",
+            "isDisabled",
+            "createdAt",
+            "updatedAt"
+          ]) &&
+          request.resource.data.isDisabled == resource.data.isDisabled &&
+          request.resource.data.fullName is string &&
+          request.resource.data.avatarUrl is null || request.resource.data.avatarUrl is string ||
+          request.resource.data.phoneNumber is null || request.resource.data.phoneNumber is string ||
+          request.resource.data.city is null || request.resource.data.city is string ||
+          request.resource.data.state is null || request.resource.data.state is string ||
+          request.resource.data.bankAccount is null || request.resource.data.bankAccount is map
+        )
+        ||
+        (
+          isAdmin() &&
+          adminImmutableUserFieldsMatch() &&
+          request.resource.data.keys().hasOnly([
+            "uid",
+            "email",
+            "fullName",
+            "role",
+            "avatarUrl",
+            "phoneNumber",
+            "city",
+            "state",
+            "bankAccount",
+            "isDisabled",
+            "createdAt",
+            "updatedAt"
+          ])
+        )
+      );
+
+      allow delete: if isSuperAdmin();
+    }
+
+    match /products/{productId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && isActive(request.auth.uid)
+        && request.resource.data.sellerId == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          "id",
+          "sellerId",
+          "title",
+          "price",
+          "category",
+          "youtubeUrl",
+          "location",
+          "createdAt",
+          "updatedAt",
+          "isActive"
+        ])
+        && request.resource.data.title is string
+        && request.resource.data.price is number
+        && request.resource.data.category is string
+        && request.resource.data.youtubeUrl is string
+        && request.resource.data.location is string
+        && request.resource.data.isActive == true;
+
+      allow update: if signedIn()
+        && (
+          isAdmin() ||
+          (resource.data.sellerId == request.auth.uid && isActive(request.auth.uid))
+        )
+        && request.resource.data.sellerId == resource.data.sellerId;
+
+      allow delete: if signedIn()
+        && (
+          isAdmin() ||
+          resource.data.sellerId == request.auth.uid
+        );
+    }
+
+    match /services/{serviceId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && isActive(request.auth.uid)
+        && request.resource.data.providerId == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          "id",
+          "providerId",
+          "title",
+          "price",
+          "category",
+          "locationType",
+          "location",
+          "createdAt",
+          "updatedAt",
+          "isActive"
+        ])
+        && request.resource.data.title is string
+        && request.resource.data.price is number
+        && request.resource.data.category is string
+        && request.resource.data.locationType is string
+        && request.resource.data.location is string
+        && request.resource.data.isActive == true;
+
+      allow update: if signedIn()
+        && (
+          isAdmin() ||
+          (resource.data.providerId == request.auth.uid && isActive(request.auth.uid))
+        )
+        && request.resource.data.providerId == resource.data.providerId;
+
+      allow delete: if signedIn()
+        && (
+          isAdmin() ||
+          resource.data.providerId == request.auth.uid
+        );
+    }
+
+    match /escrows/{escrowId} {
+      function isParticipant() {
+        return signedIn() && (
+          resource.data.creatorId == request.auth.uid ||
+          resource.data.buyerId == request.auth.uid ||
+          resource.data.sellerId == request.auth.uid
+        );
+      }
+
+      allow read: if signedIn() && (isParticipant() || isAdmin());
+
+      allow create: if signedIn()
+        && isActive(request.auth.uid)
+        && request.resource.data.creatorId == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          "id",
+          "creatorId",
+          "buyerId",
+          "sellerId",
+          "title",
+          "categoryGroup",
+          "category",
+          "amount",
+          "feeAmount",
+          "processorFeeAmount",
+          "buyerPaysAmount",
+          "sellerReceivesAmount",
+          "buyerEmail",
+          "sellerEmail",
+          "buyerToken",
+          "sellerToken",
+          "status",
+          "createdAt",
+          "updatedAt",
+          "paymentReference",
+          "paymentProvider",
+          "releasedAt",
+          "refundedAt",
+          "disputeOpenedAt"
+        ])
+        && request.resource.data.title is string
+        && request.resource.data.categoryGroup is string
+        && request.resource.data.category is string
+        && request.resource.data.amount is number
+        && request.resource.data.feeAmount is number
+        && request.resource.data.processorFeeAmount is number
+        && request.resource.data.buyerPaysAmount is number
+        && request.resource.data.sellerReceivesAmount is number
+        && request.resource.data.buyerEmail is string
+        && request.resource.data.sellerEmail is string
+        && request.resource.data.buyerToken is string
+        && request.resource.data.sellerToken is string
+        && request.resource.data.status == "created"
+        && request.resource.data.paymentReference == null
+        && request.resource.data.paymentProvider == null
+        && request.resource.data.releasedAt == null
+        && request.resource.data.refundedAt == null
+        && request.resource.data.disputeOpenedAt == null;
+
+      allow update: if signedIn()
+        && (
+          isAdmin() ||
+          isParticipant()
+        )
+        && request.resource.data.creatorId == resource.data.creatorId
+        && request.resource.data.buyerToken == resource.data.buyerToken
+        && request.resource.data.sellerToken == resource.data.sellerToken
+        && request.resource.data.amount == resource.data.amount
+        && request.resource.data.feeAmount == resource.data.feeAmount
+        && request.resource.data.processorFeeAmount == resource.data.processorFeeAmount
+        && request.resource.data.buyerPaysAmount == resource.data.buyerPaysAmount
+        && request.resource.data.sellerReceivesAmount == resource.data.sellerReceivesAmount
+        && request.resource.data.buyerEmail == resource.data.buyerEmail
+        && request.resource.data.sellerEmail == resource.data.sellerEmail
+        && request.resource.data.categoryGroup == resource.data.categoryGroup
+        && request.resource.data.category == resource.data.category;
+
+      allow delete: if isSuperAdmin();
+    }
+
+    match /messages/{messageId} {
+      function escrowRef() {
+        return /databases/$(database)/documents/escrows/$(request.resource.data.escrowId);
+      }
+
+      function escrowDataForWrite() {
+        return get(escrowRef()).data;
+      }
+
+      function messageIsParticipant() {
+        let escrow = get(/databases/$(database)/documents/escrows/$(resource.data.escrowId)).data;
+        return signedIn() && (
+          request.auth.uid == escrow.creatorId ||
+          request.auth.uid == escrow.buyerId ||
+          request.auth.uid == escrow.sellerId
+        );
+      }
+
+      allow read: if signedIn() && (
+        isAdmin() || messageIsParticipant()
+      );
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          "id",
+          "escrowId",
+          "senderId",
+          "senderEmail",
+          "senderName",
+          "message",
+          "createdAt"
+        ])
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 2000
+        && get(escrowRef()).data.creatorId != null
+        && (
+          request.auth.uid == escrowDataForWrite().creatorId ||
+          request.auth.uid == escrowDataForWrite().buyerId ||
+          request.auth.uid == escrowDataForWrite().sellerId ||
+          isAdmin()
+        );
+
+      allow update, delete: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if signedIn() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          "id",
+          "userId",
+          "type",
+          "title",
+          "body",
+          "read",
+          "createdAt",
+          "meta"
+        ])
+        && request.resource.data.userId is string
+        && request.resource.data.title is string
+        && request.resource.data.body is string
+        && request.resource.data.read == false
+        && (
+          request.resource.data.userId == request.auth.uid ||
+          isAdmin()
+        );
+
+      allow update: if signedIn()
+        && (
+          resource.data.userId == request.auth.uid ||
+          isAdmin()
+        )
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.type == resource.data.type
+        && request.resource.data.title == resource.data.title
+        && request.resource.data.body == resource.data.body
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      allow delete: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+    }
+
+    match /admin_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if isSuperAdmin();
+    }
+
+    match /disputes/{disputeId} {
+      function disputeEscrow() {
+        return get(/databases/$(database)/documents/escrows/$(resource.data.escrowId)).data;
+      }
+
+      allow read: if signedIn() && (
+        isAdmin() ||
+        request.auth.uid == resource.data.openedByUserId ||
+        request.auth.uid == disputeEscrow().creatorId ||
+        request.auth.uid == disputeEscrow().buyerId ||
+        request.auth.uid == disputeEscrow().sellerId
+      );
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          "id",
+          "escrowId",
+          "openedByUserId",
+          "reason",
+          "status",
+          "resolution",
+          "createdAt",
+          "updatedAt"
+        ])
+        && request.resource.data.openedByUserId == request.auth.uid
+        && request.resource.data.reason is string
+        && request.resource.data.status == "open"
+        && request.resource.data.resolution == null
+        && get(/databases/$(database)/documents/escrows/$(request.resource.data.escrowId)).data.creatorId != null
+        && (
+          request.auth.uid == get(/databases/$(database)/documents/escrows/$(request.resource.data.escrowId)).data.creatorId ||
+          request.auth.uid == get(/databases/$(database)/documents/escrows/$(request.resource.data.escrowId)).data.buyerId ||
+          request.auth.uid == get(/databases/$(database)/documents/escrows/$(request.resource.data.escrowId)).data.sellerId
+        );
+
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
     }
   }
 }
