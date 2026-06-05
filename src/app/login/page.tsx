@@ -5,28 +5,17 @@ import { useRouter } from "next/navigation";
 
 import AuthCard from "@/components/auth-card";
 
-import {
-  loginUser
-} from "@/lib/auth";
+import { loginUser, createServerSessionForCurrentUser } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
 
-  const [email, setEmail] =
-    useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const [password, setPassword] =
-    useState("");
-
-  const [loading, setLoading] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
-
-  async function handleSubmit(
-    e: React.FormEvent
-  ) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
     setLoading(true);
@@ -38,11 +27,12 @@ export default function LoginPage() {
         password
       );
 
+      await createServerSessionForCurrentUser();
+
       router.push("/dashboard");
     } catch (err: any) {
       setError(
-        err?.message ??
-          "Invalid credentials"
+        err?.message ?? "Invalid credentials"
       );
     } finally {
       setLoading(false);
@@ -68,11 +58,7 @@ export default function LoginPage() {
               type="email"
               required
               value={email}
-              onChange={(e) =>
-                setEmail(
-                  e.target.value
-                )
-              }
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-xl border p-3 outline-none"
             />
           </div>
@@ -86,11 +72,7 @@ export default function LoginPage() {
               type="password"
               required
               value={password}
-              onChange={(e) =>
-                setPassword(
-                  e.target.value
-                )
-              }
+              onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-xl border p-3 outline-none"
             />
           </div>
@@ -105,18 +87,12 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full rounded-xl bg-slate-900 px-4 py-3 font-medium text-white"
           >
-            {loading
-              ? "Logging In..."
-              : "Login"}
+            {loading ? "Logging In..." : "Login"}
           </button>
 
           <button
             type="button"
-            onClick={() =>
-              router.push(
-                "/forgot-password"
-              )
-            }
+            onClick={() => router.push("/forgot-password")}
             className="w-full rounded-xl border px-4 py-3"
           >
             Forgot Password
@@ -124,11 +100,7 @@ export default function LoginPage() {
 
           <button
             type="button"
-            onClick={() =>
-              router.push(
-                "/register"
-              )
-            }
+            onClick={() => router.push("/register")}
             className="w-full rounded-xl border px-4 py-3"
           >
             Create Account
