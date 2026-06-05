@@ -1,0 +1,12 @@
+// Firestore security rules will come in Stage 2.
+// This file is included here so the repo already has the production structure.
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Locked down in Stage 2 with auth + role-based access.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
