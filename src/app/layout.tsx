@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { InstallReminder } from "@/components/install-reminder";
+import AppAuthProvider from "@/components/auth-provider";
 
 const appName = process.env.NEXT_PUBLIC_APP_NAME ?? "TrustTradze";
 
@@ -43,10 +44,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
-        {children}
-        <InstallReminder />
+      <body className="min-h-screen bg-slate-50">
+        <AppAuthProvider>
+          {children}
+          <InstallReminder />
+        </AppAuthProvider>
       </body>
     </html>
   );
 }
+
