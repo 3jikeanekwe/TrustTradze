@@ -1,227 +1,297 @@
-"use client";
+import Link from "next/link";
+import { redirect } from "next/navigation";
 
-import { useState } from "react";
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  query,
-  where
-} from "firebase/firestore";
+import { getServerSessionProfile } from "@/lib/firebase/session";
+import { adminDb } from "@/lib/firebase/admin";
+import { COLLECTIONS } from "@/lib/collections";
 
-import { firebaseDb } from "@/lib/firebase/client";
-import { useAuth } from "@/hooks/use-auth";
-import AuthLoading from "@/components/auth-loading";
-import {
-  disableUser,
-  enableUser,
-  promoteToAdmin,
-  removeAdmin
-} from "@/lib/admin";
+export default async function AdminHubPage() {
+  const profile = await getServerSessionProfile();
 
-type FoundUser = {
-  uid: string;
-  email: string;
-  fullName: string;
-  role: string;
-  isDisabled?: boolean;
-};
-
-export default function AdminPage() {
-  const { profile, loading } = useAuth();
-  const [searchEmail, setSearchEmail] = useState("");
-  const [foundUser, setFoundUser] = useState<FoundUser | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-
-  if (loading) return <AuthLoading />;
-
-  async function handleSearch() {
-    setBusy(true);
-    setMessage("");
-    setFoundUser(null);
-
-    try {
-      const snapshot = await getDocs(
-        query(
-          collection(firebaseDb(), "users"),
-          where("email", "==", searchEmail.trim().toLowerCase()),
-          limit(1)
-        )
-      );
-
-      if (snapshot.empty) {
-        setMessage("No user found with that email.");
-        return;
-      }
-
-      const docSnap = snapshot.docs[0];
-      setFoundUser({
-        uid: docSnap.id,
-        ...(docSnap.data() as Omit<FoundUser, "uid">)
-      });
-    } catch (error: any) {
-      setMessage(error?.message ?? "Search failed.");
-    } finally {
-      setBusy(false);
-    }
+  if (
+    !profile ||
+    (profile.role !== "admin" && profile.role !== "super_admin")
+  ) {
+    redirect("/dashboard");
   }
 
-  async function refreshUser(uid: string) {
-    const snapshot = await getDoc(doc(firebaseDb(), "users", uid));
-    if (!snapshot.exists()) return;
+  const [
+    usersSnap,
+    escrowsSnap,
+    productsSnap,
+    servicesSnap,
+    disputesSnap,
+    notificationsSnap
+  ] = await Promise.all([
+    adminDb.collection(COLLECTIONS.USERS).get(),
+    adminDb.collection(COLLECTIONS.ESCROWS).get(),
+    adminDb.collection(COLLECTIONS.PRODUCTS).get(),
+    adminDb.collection(COLLECTIONS.SERVICES).get(),
+    adminDb
+      .collection(COLLECTIONS.DISPUTES)
+      .where("status", "==", "open")
+      .get(),
+    adminDb
+      .collection(COLLECTIONS.NOTIFICATIONS)
+      .where("read", "==", false)
+      .get()
+  ]);
 
-    setFoundUser({
-      uid: snapshot.id,
-      ...(snapshot.data() as Omit<FoundUser, "uid">)
-    });
-  }
+  const escrows = escrowsSnap.docs.map((docSnap) => docSnap.data() as any);
 
-  async function handlePromote() {
-    if (!profile?.uid || !foundUser) return;
-    setBusy(true);
-    setMessage("");
-    try {
-      await promoteToAdmin(profile.uid, foundUser.uid);
-      await refreshUser(foundUser.uid);
-      setMessage("User promoted to admin.");
-    } catch (error: any) {
-      setMessage(error?.message ?? "Unable to promote user.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const openEscrows = escrows.filter(
+    (item) =>
+      item.status === "funded" ||
+      item.status === "in_progress" ||
+      item.status === "disputed" ||
+      item.status === "refund_requested"
+  ).length;
 
-  async function handleRemoveAdmin() {
-    if (!profile?.uid || !foundUser) return;
-    setBusy(true);
-    setMessage("");
-    try {
-      await removeAdmin(profile.uid, foundUser.uid);
-      await refreshUser(foundUser.uid);
-      setMessage("Admin access removed.");
-    } catch (error: any) {
-      setMessage(error?.message ?? "Unable to remove admin.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const completedEscrows = escrows.filter(
+    (item) => item.status === "completed"
+  ).length;
 
-  async function handleDisable() {
-    if (!profile?.uid || !foundUser) return;
-    setBusy(true);
-    setMessage("");
-    try {
-      await disableUser(profile.uid, foundUser.uid);
-      await refreshUser(foundUser.uid);
-      setMessage("User disabled.");
-    } catch (error: any) {
-      setMessage(error?.message ?? "Unable to disable user.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const refundedEscrows = escrows.filter(
+    (item) => item.status === "refunded"
+  ).length;
 
-  async function handleEnable() {
-    if (!profile?.uid || !foundUser) return;
-    setBusy(true);
-    setMessage("");
-    try {
-      await enableUser(profile.uid, foundUser.uid);
-      await refreshUser(foundUser.uid);
-      setMessage("User enabled.");
-    } catch (error: any) {
-      setMessage(error?.message ?? "Unable to enable user.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const pendingEscrows = escrows.filter(
+    (item) =>
+      item.status === "created" ||
+      item.status === "invited" ||
+      item.status === "accepted" ||
+      item.status === "awaiting_payment"
+  ).length;
+
+  const recentEscrows = escrows
+    .slice()
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt ?? 0).getTime() -
+        new Date(a.createdAt ?? 0).getTime()
+    )
+    .slice(0, 5);
+
+  const recentUsers = usersSnap.docs
+    .map((docSnap) => ({
+      id: docSnap.id,
+      ...(docSnap.data() as any)
+    }))
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt ?? 0).getTime() -
+        new Date(a.createdAt ?? 0).getTime()
+    )
+    .slice(0, 5);
 
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border bg-white p-6 shadow-soft">
-        <h2 className="text-2xl font-semibold">Admin Panel</h2>
-        <p className="mt-2 text-sm text-slate-600">
-          Manage users and admin access from the super admin account.
+        <p className="text-sm text-slate-500">Admin hub</p>
+        <h1 className="mt-2 text-3xl font-semibold text-slate-950">
+          Moderation center
+        </h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+          Manage users, monitor escrow deals, resolve disputes, and keep the
+          platform safe from one place.
         </p>
 
+        <div className="mt-6 grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+          <StatCard label="Users" value={usersSnap.size} />
+          <StatCard label="Products" value={productsSnap.size} />
+          <StatCard label="Services" value={servicesSnap.size} />
+          <StatCard label="Escrows" value={escrowsSnap.size} />
+          <StatCard label="Open disputes" value={disputesSnap.size} />
+          <StatCard label="Unread notices" value={notificationsSnap.size} />
+        </div>
+
         <div className="mt-6 flex flex-col gap-3 md:flex-row">
-          <input
-            value={searchEmail}
-            onChange={(e) => setSearchEmail(e.target.value)}
-            placeholder="Search user by email"
-            className="w-full rounded-xl border px-4 py-3 outline-none md:max-w-md"
-          />
-          <button
-            onClick={handleSearch}
-            disabled={busy}
-            className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white disabled:opacity-60"
+          <Link
+            href="/dashboard/admin/users"
+            className="rounded-xl bg-slate-900 px-4 py-3 text-center text-sm font-medium text-white"
           >
-            Search
-          </button>
+            Manage users
+          </Link>
+          <Link
+            href="/dashboard/admin/escrows"
+            className="rounded-xl border px-4 py-3 text-center text-sm font-medium text-slate-700"
+          >
+            Review escrows
+          </Link>
+          <Link
+            href="/dashboard/notifications"
+            className="rounded-xl border px-4 py-3 text-center text-sm font-medium text-slate-700"
+          >
+            Notification inbox
+          </Link>
         </div>
       </section>
 
-      {message ? (
-        <div className="rounded-2xl border bg-slate-100 p-4 text-sm text-slate-700">
-          {message}
-        </div>
-      ) : null}
+      <section className="grid gap-4 md:grid-cols-3">
+        <LinkCard
+          href="/dashboard/admin/users"
+          title="User management"
+          text="Search users, promote admins, disable accounts, and restore accounts."
+        />
+        <LinkCard
+          href="/dashboard/admin/escrows"
+          title="Escrow moderation"
+          text="Inspect escrow deals, resolve disputes, refund buyers, and release funds."
+        />
+        <LinkCard
+          href="/dashboard/notifications"
+          title="Notification inbox"
+          text="Track unread notifications, mark them as read, and stay on top of activity."
+        />
+      </section>
 
-      {foundUser ? (
-        <section className="rounded-3xl border bg-white p-6 shadow-soft">
-          <h3 className="text-xl font-semibold">User Details</h3>
+      <section className="grid gap-4 xl:grid-cols-2">
+        <Panel
+          title="Recent escrows"
+          emptyText="No escrows found."
+          items={recentEscrows.map((item) => (
+            <div
+              key={item.id}
+              className="rounded-2xl border bg-slate-50 p-4"
+            >
+              <p className="text-sm font-semibold text-slate-950">
+                {item.title}
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                Status: {item.status}
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                Buyer: {item.buyerEmail}
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                Seller: {item.sellerEmail}
+              </p>
+              <div className="mt-4 flex gap-3">
+                <Link
+                  href={`/dashboard/admin/escrows/${item.id}`}
+                  className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700"
+                >
+                  Open
+                </Link>
+                <Link
+                  href={`/dashboard/escrows/${item.id}`}
+                  className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700"
+                >
+                  Dashboard view
+                </Link>
+              </div>
+            </div>
+          ))}
+        />
 
-          <div className="mt-4 space-y-2 text-sm text-slate-700">
-            <p>
-              <span className="font-medium">Name:</span> {foundUser.fullName}
-            </p>
-            <p>
-              <span className="font-medium">Email:</span> {foundUser.email}
-            </p>
-            <p>
-              <span className="font-medium">Role:</span> {foundUser.role}
-            </p>
-            <p>
-              <span className="font-medium">Status:</span>{" "}
-              {foundUser.isDisabled ? "Disabled" : "Active"}
-            </p>
-          </div>
+        <Panel
+          title="Recent users"
+          emptyText="No users found."
+          items={recentUsers.map((item) => (
+            <div
+              key={item.id}
+              className="rounded-2xl border bg-slate-50 p-4"
+            >
+              <p className="text-sm font-semibold text-slate-950">
+                {item.fullName}
+              </p>
+              <p className="mt-1 text-sm text-slate-600">{item.email}</p>
+              <p className="mt-1 text-sm text-slate-600">
+                Role: {item.role}
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                Status: {item.isDisabled ? "Disabled" : "Active"}
+              </p>
+              <div className="mt-4 flex gap-3">
+                <Link
+                  href={`/dashboard/users/${item.id}`}
+                  className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700"
+                >
+                  Open profile
+                </Link>
+                <Link
+                  href="/dashboard/admin/users"
+                  className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700"
+                >
+                  Manage
+                </Link>
+              </div>
+            </div>
+          ))}
+        />
+      </section>
 
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button
-              onClick={handlePromote}
-              disabled={busy || foundUser.role === "admin" || foundUser.role === "super_admin"}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              Promote to admin
-            </button>
-            <button
-              onClick={handleRemoveAdmin}
-              disabled={busy || (foundUser.role !== "admin" && foundUser.role !== "super_admin")}
-              className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
-            >
-              Remove admin
-            </button>
-            <button
-              onClick={handleDisable}
-              disabled={busy || foundUser.isDisabled}
-              className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
-            >
-              Disable user
-            </button>
-            <button
-              onClick={handleEnable}
-              disabled={busy || !foundUser.isDisabled}
-              className="rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
-            >
-              Enable user
-            </button>
-          </div>
-        </section>
-      ) : null}
+      <section className="rounded-3xl border bg-white p-6 shadow-soft">
+        <h2 className="text-xl font-semibold">Platform reminder</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Make sure buyers confirm receipt after getting the product or service
+          so the escrow can be released to the seller or service provider.
+        </p>
+      </section>
     </div>
   );
 }
+
+function StatCard({
+  label,
+  value
+}: {
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className="rounded-2xl border bg-slate-50 p-4">
+      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+        {label}
+      </p>
+      <p className="mt-2 text-2xl font-semibold text-slate-950">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function LinkCard({
+  href,
+  title,
+  text
+}: {
+  href: string;
+  title: string;
+  text: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="rounded-3xl border bg-white p-6 shadow-soft transition hover:-translate-y-0.5"
+    >
+      <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{text}</p>
+    </Link>
+  );
+}
+
+function Panel({
+  title,
+  emptyText,
+  items
+}: {
+  title: string;
+  emptyText: string;
+  items: React.ReactNode[];
+}) {
+  return (
+    <div className="rounded-3xl border bg-white p-6 shadow-soft">
+      <h2 className="text-xl font-semibold text-slate-950">{title}</h2>
+      <div className="mt-4 space-y-3">
+        {items.length === 0 ? (
+          <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-slate-600">
+            {emptyText}
+          </div>
+        ) : (
+          items
+        )}
+      </div>
+    </div>
+  );
+        }
