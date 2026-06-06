@@ -14,6 +14,10 @@ export function getDashboardNavItems(
       label: "Overview"
     },
     {
+      href: "/dashboard/escrows",
+      label: "Escrows"
+    },
+    {
       href: "/dashboard/notifications",
       label: "Notifications"
     },
@@ -23,10 +27,7 @@ export function getDashboardNavItems(
     }
   ];
 
-  if (
-    role === "admin" ||
-    role === "super_admin"
-  ) {
+  if (role === "admin" || role === "super_admin") {
     items.push({
       href: "/dashboard/admin",
       label: "Admin Panel"
