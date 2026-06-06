@@ -14,8 +14,8 @@ export default function DashboardHomePage() {
           {profile?.fullName ?? user?.email ?? "TrustTradze user"}
         </h2>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-          Manage escrows, create new deals, watch transaction history, receive notifications,
-          and handle account settings from one place.
+          Manage escrows, browse products and services, search sellers, and keep all deal
+          communication in one place.
         </p>
       </section>
 
@@ -26,13 +26,31 @@ export default function DashboardHomePage() {
           href="/dashboard/escrows/new"
         />
         <Card
+          title="Products"
+          text="Browse product listings with embedded YouTube videos."
+          href="/dashboard/products"
+        />
+        <Card
+          title="Services"
+          text="Browse service providers and home/online services."
+          href="/dashboard/services"
+        />
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-3">
+        <Card
+          title="Search"
+          text="Search products, services, and users in one place."
+          href="/dashboard/search"
+        />
+        <Card
           title="Escrow history"
           text="See every deal you created, accepted, funded, completed, refunded, or disputed."
           href="/dashboard/escrows"
         />
         <Card
           title="Account settings"
-          text="Update your profile and connected bank account details."
+          text="Update your profile, WhatsApp number, and connected bank account."
           href="/dashboard/settings"
         />
       </section>
