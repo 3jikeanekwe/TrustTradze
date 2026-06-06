@@ -15,6 +15,7 @@ import {
 
 import { firebaseAuth, firebaseDb } from "@/lib/firebase/client";
 import { SUPER_ADMIN_EMAIL } from "@/lib/constants";
+import { buildSearchKeywords } from "@/lib/marketplace";
 
 export async function registerUser(
   fullName: string,
@@ -46,6 +47,7 @@ export async function registerUser(
     state: null,
     bankAccount: null,
     isDisabled: false,
+    searchKeywords: buildSearchKeywords([fullName, email]),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
