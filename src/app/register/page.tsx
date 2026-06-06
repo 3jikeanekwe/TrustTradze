@@ -1,14 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import AuthCard from "@/components/auth-card";
 
-import { registerUser, createServerSessionForCurrentUser } from "@/lib/auth";
+import {
+  createServerSessionForCurrentUser,
+  registerUser
+} from "@/lib/auth";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = searchParams.get("next") || "/dashboard";
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -28,14 +33,10 @@ export default function RegisterPage() {
         email.trim().toLowerCase(),
         password
       );
-
       await createServerSessionForCurrentUser();
-
-      router.push("/dashboard");
+      router.push(nextPath);
     } catch (err: any) {
-      setError(
-        err?.message ?? "Failed to create account"
-      );
+      setError(err?.message ?? "Failed to create account");
     } finally {
       setLoading(false);
     }
@@ -43,19 +44,10 @@ export default function RegisterPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-10">
-      <AuthCard
-        title="Create Account"
-        subtitle="Start using TrustTradze"
-      >
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-4"
-        >
+      <AuthCard title="Create Account" subtitle="Start using TrustTradze">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium">
-              Full Name
-            </label>
-
+            <label className="mb-1 block text-sm font-medium">Full Name</label>
             <input
               required
               value={fullName}
@@ -65,10 +57,7 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">
-              Email
-            </label>
-
+            <label className="mb-1 block text-sm font-medium">Email</label>
             <input
               type="email"
               required
@@ -79,10 +68,7 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">
-              Password
-            </label>
-
+            <label className="mb-1 block text-sm font-medium">Password</label>
             <input
               type="password"
               required
@@ -93,11 +79,11 @@ export default function RegisterPage() {
             />
           </div>
 
-          {error && (
+          {error ? (
             <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">
               {error}
             </div>
-          )}
+          ) : null}
 
           <button
             disabled={loading}
@@ -108,7 +94,7 @@ export default function RegisterPage() {
 
           <button
             type="button"
-            onClick={() => router.push("/login")}
+            onClick={() => router.push(`/login?next=${encodeURIComponent(nextPath)}`)}
             className="w-full rounded-xl border px-4 py-3"
           >
             Login Instead
