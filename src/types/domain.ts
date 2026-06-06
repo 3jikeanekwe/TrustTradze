@@ -134,6 +134,7 @@ export interface EscrowRecord {
   createdAt: string;
   updatedAt: string;
   paymentReference?: string | null;
+  paystackTransactionId?: string | null;
   paymentProvider?: "paystack" | null;
   releasedAt?: string | null;
   refundedAt?: string | null;
@@ -168,6 +169,7 @@ export interface DisputeRecord {
   reason: string;
   status: "open" | "resolved" | "rejected";
   resolution?: "refund_buyer" | "release_seller" | null;
+  resolutionNote?: string | null;
   createdAt: string;
   updatedAt: string;
 }
