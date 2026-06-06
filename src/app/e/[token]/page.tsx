@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   collection,
@@ -8,6 +8,8 @@ import {
   getDoc,
   getDocs,
   limit,
+  onSnapshot,
+  orderBy,
   query,
   where
 } from "firebase/firestore";
@@ -55,6 +57,16 @@ type UserDoc = {
   email: string;
 };
 
+type ChatMessageDoc = {
+  id: string;
+  escrowId: string;
+  senderId: string;
+  senderEmail: string;
+  senderName: string;
+  message: string;
+  createdAt: string;
+};
+
 async function loadUser(uid: string): Promise<UserDoc | null> {
   const snap = await getDoc(doc(firebaseDb(), "users", uid));
   if (!snap.exists()) return null;
@@ -83,6 +95,13 @@ export default function EscrowTokenPage({
   const [disputeReason, setDisputeReason] = useState("");
   const [notice, setNotice] = useState("");
 
+  const [messages, setMessages] = useState<ChatMessageDoc[]>([]);
+  const [chatMessage, setChatMessage] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatError, setChatError] = useState("");
+
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+
   const accessRole = useMemo(() => {
     if (!escrow || !user) return null;
     return getParticipantRole(escrow, user.uid);
@@ -93,6 +112,10 @@ export default function EscrowTokenPage({
       router.push(`/login?next=${encodeURIComponent(`/e/${token}`)}`);
     }
   }, [loading, user, router, token]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   async function loadEscrow() {
     setLoadingEscrow(true);
@@ -110,10 +133,7 @@ export default function EscrowTokenPage({
         limit(1)
       );
 
-      const [buyerSnap, sellerSnap] = await Promise.all([
-        getDocs(buyerQuery),
-        getDocs(sellerQuery)
-      ]);
+      const [buyerSnap, sellerSnap] = await Promise.all([getDocs(buyerQuery), getDocs(sellerQuery)]);
 
       const snap = !buyerSnap.empty ? buyerSnap.docs[0] : !sellerSnap.empty ? sellerSnap.docs[0] : null;
 
@@ -143,6 +163,33 @@ export default function EscrowTokenPage({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, token]);
+
+  useEffect(() => {
+    if (!escrow) return;
+
+    const q = query(
+      collection(firebaseDb(), "messages"),
+      where("escrowId", "==", escrow.id),
+      orderBy("createdAt", "asc")
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        setMessages(
+          snapshot.docs.map((docSnap) => ({
+            id: docSnap.id,
+            ...(docSnap.data() as Omit<ChatMessageDoc, "id">)
+          }))
+        );
+      },
+      (err) => {
+        setChatError(err.message);
+      }
+    );
+
+    return unsubscribe;
+  }, [escrow?.id]);
 
   async function acceptAndPay() {
     if (!escrow) return;
@@ -289,7 +336,41 @@ export default function EscrowTokenPage({
     }
   }
 
-  const accessToken = getAccessibleToken(escrow ?? (null as any), user?.uid);
+  async function sendChatMessage() {
+    if (!escrow) return;
+    if (!chatMessage.trim()) return;
+
+    setChatBusy(true);
+    setChatError("");
+    setNotice("");
+
+    try {
+      const res = await fetch(`/api/escrows/${escrow.id}/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          message: chatMessage.trim()
+        })
+      });
+
+      const data = (await res.json()) as { error?: string };
+
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to send message");
+      }
+
+      setChatMessage("");
+      setNotice("Message sent.");
+    } catch (err: any) {
+      setChatError(err?.message ?? "Unable to send message");
+    } finally {
+      setChatBusy(false);
+    }
+  }
+
+  const accessToken = escrow ? getAccessibleToken(escrow, user?.uid) : null;
 
   if (loading || loadingEscrow) {
     return <AuthLoading />;
@@ -327,6 +408,12 @@ export default function EscrowTokenPage({
   const buyerName = buyer?.fullName ?? escrow.buyerEmail;
   const sellerName = seller?.fullName ?? escrow.sellerEmail;
 
+  const canChat =
+    profile.role === "admin" ||
+    profile.role === "super_admin" ||
+    accessRole === "buyer" ||
+    accessRole === "seller";
+
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8">
       <div className="mx-auto max-w-4xl space-y-6">
@@ -339,11 +426,16 @@ export default function EscrowTokenPage({
                 {escrow.categoryGroup} / {escrow.category}
               </p>
               <p className="mt-2 text-sm text-slate-600">
-                Status: <span className="font-medium text-slate-900">{getEscrowStatusLabel(escrow.status as any)}</span>
+                Status:{" "}
+                <span className="font-medium text-slate-900">
+                  {getEscrowStatusLabel(escrow.status as any)}
+                </span>
               </p>
               <p className="mt-2 text-sm text-slate-600">
                 You are viewing this as{" "}
-                <span className="font-medium text-slate-900">{accessRole ?? "participant"}</span>
+                <span className="font-medium text-slate-900">
+                  {accessRole ?? "participant"}
+                </span>
               </p>
             </div>
 
@@ -368,9 +460,18 @@ export default function EscrowTokenPage({
           </div>
 
           <div className="mt-6 rounded-2xl border bg-slate-50 p-4 text-sm text-slate-600">
-            <p><span className="font-medium text-slate-900">Buyer token link:</span> {accessRole === "buyer" ? buildLink(`/e/${token}`) : "hidden"}</p>
-            <p className="mt-1"><span className="font-medium text-slate-900">Seller token link:</span> {accessRole === "seller" ? buildLink(`/e/${token}`) : "hidden"}</p>
-            <p className="mt-1"><span className="font-medium text-slate-900">Payment reference:</span> {escrow.paymentReference ?? "Not set yet"}</p>
+            <p>
+              <span className="font-medium text-slate-900">Buyer token link:</span>{" "}
+              {accessRole === "buyer" ? buildLink(`/e/${token}`) : "hidden"}
+            </p>
+            <p className="mt-1">
+              <span className="font-medium text-slate-900">Seller token link:</span>{" "}
+              {accessRole === "seller" ? buildLink(`/e/${token}`) : "hidden"}
+            </p>
+            <p className="mt-1">
+              <span className="font-medium text-slate-900">Payment reference:</span>{" "}
+              {escrow.paymentReference ?? "Not set yet"}
+            </p>
           </div>
         </section>
 
@@ -391,7 +492,9 @@ export default function EscrowTokenPage({
 
           <div className="mt-5 flex flex-col gap-3 md:flex-row md:flex-wrap">
             {accessRole === "buyer" &&
-            (escrow.status === "invited" || escrow.status === "accepted" || escrow.status === "awaiting_payment") ? (
+            (escrow.status === "invited" ||
+              escrow.status === "accepted" ||
+              escrow.status === "awaiting_payment") ? (
               <button
                 onClick={acceptAndPay}
                 disabled={actionBusy}
@@ -401,7 +504,8 @@ export default function EscrowTokenPage({
               </button>
             ) : null}
 
-            {accessRole === "buyer" && (escrow.status === "funded" || escrow.status === "in_progress") ? (
+            {accessRole === "buyer" &&
+            (escrow.status === "funded" || escrow.status === "in_progress") ? (
               <>
                 <button
                   onClick={confirmReceipt}
@@ -410,6 +514,7 @@ export default function EscrowTokenPage({
                 >
                   Confirm received
                 </button>
+
                 <div className="flex flex-col gap-3 md:min-w-[320px]">
                   <input
                     value={disputeReason}
@@ -428,7 +533,10 @@ export default function EscrowTokenPage({
               </>
             ) : null}
 
-            {accessRole === "seller" && (escrow.status === "funded" || escrow.status === "in_progress" || escrow.status === "accepted") ? (
+            {accessRole === "seller" &&
+            (escrow.status === "funded" ||
+              escrow.status === "in_progress" ||
+              escrow.status === "accepted") ? (
               <>
                 <button
                   onClick={refundBuyer}
@@ -437,6 +545,7 @@ export default function EscrowTokenPage({
                 >
                   Refund buyer
                 </button>
+
                 <div className="flex flex-col gap-3 md:min-w-[320px]">
                   <input
                     value={disputeReason}
@@ -494,6 +603,80 @@ export default function EscrowTokenPage({
             <InfoCard label="Access token" value={accessToken ?? "—"} />
           </div>
         </section>
+
+        <section className="rounded-3xl border bg-white p-6 shadow-soft">
+          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">Chat</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Keep all deal messages inside this escrow so the record stays complete.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-3 rounded-2xl border bg-slate-50 p-4">
+            {messages.length === 0 ? (
+              <p className="text-sm text-slate-600">No messages yet.</p>
+            ) : (
+              messages.map((item) => {
+                const mine = item.senderId === user?.uid;
+                return (
+                  <div
+                    key={item.id}
+                    className={[
+                      "max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm",
+                      mine
+                        ? "ml-auto bg-slate-900 text-white"
+                        : "bg-white text-slate-800"
+                    ].join(" ")}
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-xs font-semibold uppercase tracking-[0.2em] opacity-70">
+                        {item.senderName}
+                      </span>
+                      <span className="text-[11px] opacity-70">
+                        {new Date(item.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                    <p className="mt-2 leading-6">{item.message}</p>
+                  </div>
+                );
+              })
+            )}
+            <div ref={bottomRef} />
+          </div>
+
+          {canChat ? (
+            <>
+              {chatError ? (
+                <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                  {chatError}
+                </div>
+              ) : null}
+
+              <div className="mt-5 flex flex-col gap-3 md:flex-row">
+                <textarea
+                  value={chatMessage}
+                  onChange={(e) => setChatMessage(e.target.value)}
+                  placeholder="Write a message..."
+                  rows={4}
+                  className="min-h-[110px] w-full rounded-2xl border px-4 py-3 outline-none"
+                />
+                <button
+                  onClick={sendChatMessage}
+                  disabled={chatBusy || !chatMessage.trim()}
+                  className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white disabled:opacity-60 md:self-end"
+                >
+                  {chatBusy ? "Sending..." : "Send"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="mt-4 rounded-2xl border bg-slate-50 p-4 text-sm text-slate-600">
+              Chat is available only to the buyer, seller, and admins.
+            </div>
+          )}
+        </section>
       </div>
     </main>
   );
@@ -509,7 +692,7 @@ function InfoCard({
   return (
     <div className="rounded-2xl border bg-slate-50 p-4">
       <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{label}</p>
-      <p className="mt-2 text-sm font-medium text-slate-900 break-words">{value}</p>
+      <p className="mt-2 break-words text-sm font-medium text-slate-900">{value}</p>
     </div>
   );
 }
@@ -517,4 +700,4 @@ function InfoCard({
 function buildLink(path: string) {
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   return `${base}${path}`;
-                                                          }
+        }
