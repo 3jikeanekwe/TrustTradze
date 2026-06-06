@@ -66,6 +66,23 @@ export interface UserProfile {
   updatedAt: string;
   isDisabled?: boolean;
   bankAccount?: BankAccount | null;
+  phoneNumber?: string | null;
+  state?: string | null;
+  city?: string | null;
+  searchKeywords?: string[];
+}
+
+export interface PublicUserSummary {
+  uid: string;
+  fullName: string;
+  email: string;
+  phoneNumber: string | null;
+  state: string | null;
+  city: string | null;
+  role: string;
+  isDisabled: boolean;
+  createdAt: string;
+  whatsappUrl?: string | null;
 }
 
 export interface ProductRecord {
@@ -79,6 +96,7 @@ export interface ProductRecord {
   createdAt: string;
   updatedAt: string;
   isActive: boolean;
+  searchKeywords?: string[];
 }
 
 export interface ServiceRecord {
@@ -92,6 +110,7 @@ export interface ServiceRecord {
   createdAt: string;
   updatedAt: string;
   isActive: boolean;
+  searchKeywords?: string[];
 }
 
 export interface EscrowRecord {
@@ -151,4 +170,19 @@ export interface DisputeRecord {
   resolution?: "refund_buyer" | "release_seller" | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface MarketplaceProductView extends ProductRecord {
+  seller: PublicUserSummary | null;
+  youtubeEmbedUrl: string;
+}
+
+export interface MarketplaceServiceView extends ServiceRecord {
+  provider: PublicUserSummary | null;
+}
+
+export interface SearchResponsePayload {
+  products: MarketplaceProductView[];
+  services: MarketplaceServiceView[];
+  users: PublicUserSummary[];
 }
