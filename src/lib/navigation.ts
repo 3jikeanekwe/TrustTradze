@@ -14,6 +14,18 @@ export function getDashboardNavItems(
       label: "Overview"
     },
     {
+      href: "/dashboard/products",
+      label: "Products"
+    },
+    {
+      href: "/dashboard/services",
+      label: "Services"
+    },
+    {
+      href: "/dashboard/search",
+      label: "Search"
+    },
+    {
       href: "/dashboard/escrows",
       label: "Escrows"
     },
