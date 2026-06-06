@@ -9,12 +9,13 @@ import {
 
 import {
   onAuthStateChanged,
-  User
+  type User
 } from "firebase/auth";
 
 import {
   doc,
-  onSnapshot
+  onSnapshot,
+  type Unsubscribe
 } from "firebase/firestore";
 
 import {
@@ -28,63 +29,56 @@ interface AuthContextType {
   loading: boolean;
 }
 
-const AuthContext =
-  createContext<AuthContextType>({
-    user: null,
-    profile: null,
-    loading: true
-  });
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  profile: null,
+  loading: true
+});
 
 export function AuthProvider({
   children
 }: {
   children: React.ReactNode;
 }) {
-  const [user, setUser] =
-    useState<User | null>(null);
-
-  const [profile, setProfile] =
-    useState<any>(null);
-
-  const [loading, setLoading] =
-    useState(true);
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe =
-      onAuthStateChanged(
-        firebaseAuth(),
-        (firebaseUser) => {
-          setUser(firebaseUser);
+    let profileUnsubscribe: Unsubscribe | null = null;
 
-          if (!firebaseUser) {
-            setProfile(null);
-            setLoading(false);
-            return;
-          }
+    const authUnsubscribe = onAuthStateChanged(
+      firebaseAuth(),
+      (firebaseUser) => {
+        setUser(firebaseUser);
 
-          const profileUnsubscribe =
-            onSnapshot(
-              doc(
-                firebaseDb(),
-                "users",
-                firebaseUser.uid
-              ),
-              (snapshot) => {
-                setProfile(
-                  snapshot.exists()
-                    ? snapshot.data()
-                    : null
-                );
-
-                setLoading(false);
-              }
-            );
-
-          return profileUnsubscribe;
+        if (profileUnsubscribe) {
+          profileUnsubscribe();
+          profileUnsubscribe = null;
         }
-      );
 
-    return unsubscribe;
+        if (!firebaseUser) {
+          setProfile(null);
+          setLoading(false);
+          return;
+        }
+
+        profileUnsubscribe = onSnapshot(
+          doc(firebaseDb(), "users", firebaseUser.uid),
+          (snapshot) => {
+            setProfile(snapshot.exists() ? snapshot.data() : null);
+            setLoading(false);
+          }
+        );
+      }
+    );
+
+    return () => {
+      if (profileUnsubscribe) {
+        profileUnsubscribe();
+      }
+      authUnsubscribe();
+    };
   }, []);
 
   return (
