@@ -3,6 +3,8 @@
 import { useState } from "react";
 import {
   collection,
+  doc,
+  getDoc,
   getDocs,
   limit,
   query,
@@ -68,19 +70,12 @@ export default function AdminPage() {
   }
 
   async function refreshUser(uid: string) {
-    const snapshot = await getDocs(
-      query(
-        collection(firebaseDb(), "users"),
-        where("__name__", "==", uid),
-        limit(1)
-      )
-    );
+    const snapshot = await getDoc(doc(firebaseDb(), "users", uid));
+    if (!snapshot.exists()) return;
 
-    if (snapshot.empty) return;
-    const docSnap = snapshot.docs[0];
     setFoundUser({
-      uid: docSnap.id,
-      ...(docSnap.data() as Omit<FoundUser, "uid">)
+      uid: snapshot.id,
+      ...(snapshot.data() as Omit<FoundUser, "uid">)
     });
   }
 
