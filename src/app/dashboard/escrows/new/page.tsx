@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import AuthLoading from "@/components/auth-loading";
 import { useAuth } from "@/hooks/use-auth";
-import { formatMoney } from "@/lib/escrow";
+import { formatMoney } from "@/lib/marketplace";
 
 const PRODUCT_CATEGORIES = [
   "Agriculture",
@@ -29,9 +29,21 @@ const SERVICE_CATEGORIES = [
   "Other"
 ] as const;
 
+type PrefillSource = {
+  title: string;
+  categoryGroup: "products" | "services";
+  category: string;
+  amount: number;
+  sellerEmail: string;
+};
+
 export default function NewEscrowPage() {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  const searchParams = useSearchParams();
+  const { user, profile, loading } = useAuth();
+
+  const productId = searchParams.get("productId");
+  const serviceId = searchParams.get("serviceId");
 
   const [title, setTitle] = useState("");
   const [categoryGroup, setCategoryGroup] = useState<"products" | "services">("products");
@@ -46,6 +58,7 @@ export default function NewEscrowPage() {
     sellerLink: string;
     escrowId: string;
   } | null>(null);
+  const [prefillMessage, setPrefillMessage] = useState("");
 
   const categories = useMemo(() => {
     return categoryGroup === "products" ? PRODUCT_CATEGORIES : SERVICE_CATEGORIES;
@@ -54,6 +67,72 @@ export default function NewEscrowPage() {
   useEffect(() => {
     setCategory(categories[0]);
   }, [categories]);
+
+  useEffect(() => {
+    if (!profile?.email) return;
+    if (!buyerEmail.trim()) {
+      setBuyerEmail(profile.email);
+    }
+  }, [profile?.email, buyerEmail]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPrefill() {
+      if (!productId && !serviceId) return;
+
+      try {
+        const endpoint = productId
+          ? `/api/products/${productId}`
+          : `/api/services/${serviceId}`;
+
+        const res = await fetch(endpoint, { cache: "no-store" });
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data?.error ?? "Unable to load selected listing");
+        }
+
+        const item = productId ? data.product : data.service;
+        const seller = productId ? data.product?.seller : data.service?.provider;
+
+        if (!item || !seller) {
+          throw new Error("Listing data is incomplete");
+        }
+
+        const prefill: PrefillSource = {
+          title: item.title,
+          categoryGroup: productId ? "products" : "services",
+          category: item.category,
+          amount: Number(item.price ?? 0),
+          sellerEmail: seller.email
+        };
+
+        if (cancelled) return;
+
+        setTitle(prefill.title);
+        setCategoryGroup(prefill.categoryGroup);
+        setCategory(prefill.category);
+        setAmount(String(prefill.amount));
+        setSellerEmail(prefill.sellerEmail);
+        setBuyerEmail((current) => current || profile?.email || "");
+        setPrefillMessage(
+          productId
+            ? "Product details loaded. Review the fields and create the escrow."
+            : "Service details loaded. Review the fields and create the escrow."
+        );
+      } catch (err: any) {
+        if (cancelled) return;
+        setError(err?.message ?? "Unable to load listing prefill");
+      }
+    }
+
+    void loadPrefill();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [productId, serviceId, profile?.email]);
 
   if (loading) return <AuthLoading />;
 
@@ -119,6 +198,12 @@ export default function NewEscrowPage() {
         <p className="mt-2 text-sm text-slate-600">
           Start a product, service, or custom deal and share the generated link.
         </p>
+
+        {prefillMessage ? (
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            {prefillMessage}
+          </div>
+        ) : null}
 
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           <Field label="Title" value={title} onChange={setTitle} />
@@ -235,4 +320,4 @@ function LinkCard({
       <p className="mt-2 break-all text-sm font-medium text-slate-900">{value}</p>
     </div>
   );
-              }
+          }
