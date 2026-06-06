@@ -40,10 +40,20 @@ export function getDashboardNavItems(
   ];
 
   if (role === "admin" || role === "super_admin") {
-    items.push({
-      href: "/dashboard/admin",
-      label: "Admin Panel"
-    });
+    items.push(
+      {
+        href: "/dashboard/admin",
+        label: "Admin Hub"
+      },
+      {
+        href: "/dashboard/admin/users",
+        label: "Admin Users"
+      },
+      {
+        href: "/dashboard/admin/escrows",
+        label: "Admin Escrows"
+      }
+    );
   }
 
   return items;
