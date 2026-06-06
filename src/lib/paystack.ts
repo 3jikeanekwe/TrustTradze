@@ -22,11 +22,15 @@ async function paystackRequest<T>(path: string, init?: RequestInit): Promise<T> 
   });
 
   const data = (await res.json()) as T & { status?: boolean; message?: string };
+
   if (!res.ok) {
     throw new Error(
-      `Paystack request failed (${res.status}): ${typeof data === "object" && data && "message" in data ? data.message : "Unknown error"}`
+      `Paystack request failed (${res.status}): ${
+        typeof data === "object" && data && "message" in data ? data.message : "Unknown error"
+      }`
     );
   }
+
   return data;
 }
 
@@ -73,6 +77,52 @@ export type PaystackVerifyResponse = {
   };
 };
 
+export type PaystackTransferRecipientResponse = {
+  status: boolean;
+  message: string;
+  data: {
+    active: boolean;
+    currency: string;
+    domain: string;
+    id: number;
+    name: string;
+    recipient_code: string;
+    type: string;
+    is_deleted: boolean;
+    details: {
+      account_number: string;
+      account_name: string;
+      bank_code: string;
+      bank_name: string;
+    };
+  };
+};
+
+export type PaystackTransferResponse = {
+  status: boolean;
+  message: string;
+  data: {
+    reference: string;
+    amount: number;
+    currency: string;
+    source: string;
+    reason: string;
+    status: string;
+    transfer_code: string;
+  };
+};
+
+export type PaystackRefundResponse = {
+  status: boolean;
+  message: string;
+  data: {
+    transaction: number;
+    amount: number;
+    reference: string;
+    status: string;
+  };
+};
+
 export async function initializePaystackTransaction(input: {
   email: string;
   amountKobo: number;
@@ -94,6 +144,59 @@ export async function initializePaystackTransaction(input: {
 
 export async function verifyPaystackTransaction(reference: string) {
   return paystackRequest<PaystackVerifyResponse>(`/transaction/verify/${encodeURIComponent(reference)}`);
+}
+
+export async function createPaystackTransferRecipient(input: {
+  name: string;
+  accountNumber: string;
+  bankCode: string;
+  currency?: string;
+}) {
+  return paystackRequest<PaystackTransferRecipientResponse>("/transferrecipient", {
+    method: "POST",
+    body: JSON.stringify({
+      type: "nuban",
+      name: input.name,
+      account_number: input.accountNumber,
+      bank_code: input.bankCode,
+      currency: input.currency ?? "NGN"
+    })
+  });
+}
+
+export async function createPaystackTransfer(input: {
+  recipient: string;
+  amountKobo: number;
+  reason: string;
+  reference: string;
+}) {
+  return paystackRequest<PaystackTransferResponse>("/transfer", {
+    method: "POST",
+    body: JSON.stringify({
+      source: "balance",
+      recipient: input.recipient,
+      amount: input.amountKobo,
+      reason: input.reason,
+      reference: input.reference
+    })
+  });
+}
+
+export async function refundPaystackTransaction(input: {
+  transaction: string;
+  amountKobo?: number;
+  customerNote?: string;
+  merchantNote?: string;
+}) {
+  return paystackRequest<PaystackRefundResponse>("/refund", {
+    method: "POST",
+    body: JSON.stringify({
+      transaction: input.transaction,
+      ...(typeof input.amountKobo === "number" ? { amount: input.amountKobo } : {}),
+      ...(input.customerNote ? { customer_note: input.customerNote } : {}),
+      ...(input.merchantNote ? { merchant_note: input.merchantNote } : {})
+    })
+  });
 }
 
 export function verifyPaystackWebhookSignature(payload: string, signature: string | null | undefined) {
