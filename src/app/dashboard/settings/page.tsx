@@ -38,13 +38,13 @@ export default function SettingsPage() {
   }, [profile]);
 
   async function handleSave() {
-    if (!user) return;
+    if (!user || !profile) return;
 
     setSaving(true);
     setMessage("");
 
     try {
-      await updateProfile(user.uid, {
+      await updateProfile(user.uid, profile.email, {
         fullName: fullName.trim(),
         phoneNumber: phoneNumber.trim(),
         state: state.trim(),
@@ -75,7 +75,7 @@ export default function SettingsPage() {
     }
   }
 
-  if (loading) return <AuthLoading />;
+  if (loading) return <AuthLoading />
 
   return (
     <div className="space-y-6">
@@ -87,7 +87,7 @@ export default function SettingsPage() {
 
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           <Field label="Full name" value={fullName} onChange={setFullName} />
-          <Field label="Phone number" value={phoneNumber} onChange={setPhoneNumber} />
+          <Field label="WhatsApp number" value={phoneNumber} onChange={setPhoneNumber} />
           <Field label="State" value={state} onChange={setState} />
           <Field label="City" value={city} onChange={setCity} />
         </div>
@@ -144,4 +144,4 @@ function Field({
       />
     </label>
   );
-}
+          }
