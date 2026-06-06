@@ -73,6 +73,7 @@ service cloud.firestore {
           "state",
           "bankAccount",
           "isDisabled",
+          "searchKeywords",
           "createdAt",
           "updatedAt"
         ])
@@ -85,6 +86,7 @@ service cloud.firestore {
         && request.resource.data.state == null
         && request.resource.data.bankAccount == null
         && request.resource.data.isDisabled == false
+        && request.resource.data.searchKeywords is list
         && request.resource.data.createdAt is timestamp
         && request.resource.data.updatedAt is timestamp
         && (
@@ -113,16 +115,18 @@ service cloud.firestore {
             "state",
             "bankAccount",
             "isDisabled",
+            "searchKeywords",
             "createdAt",
             "updatedAt"
           ]) &&
           request.resource.data.isDisabled == resource.data.isDisabled &&
           request.resource.data.fullName is string &&
-          request.resource.data.avatarUrl is null || request.resource.data.avatarUrl is string ||
-          request.resource.data.phoneNumber is null || request.resource.data.phoneNumber is string ||
-          request.resource.data.city is null || request.resource.data.city is string ||
-          request.resource.data.state is null || request.resource.data.state is string ||
-          request.resource.data.bankAccount is null || request.resource.data.bankAccount is map
+          (request.resource.data.avatarUrl == null || request.resource.data.avatarUrl is string) &&
+          (request.resource.data.phoneNumber == null || request.resource.data.phoneNumber is string) &&
+          (request.resource.data.city == null || request.resource.data.city is string) &&
+          (request.resource.data.state == null || request.resource.data.state is string) &&
+          (request.resource.data.bankAccount == null || request.resource.data.bankAccount is map) &&
+          request.resource.data.searchKeywords is list
         )
         ||
         (
@@ -139,9 +143,11 @@ service cloud.firestore {
             "state",
             "bankAccount",
             "isDisabled",
+            "searchKeywords",
             "createdAt",
             "updatedAt"
-          ])
+          ]) &&
+          request.resource.data.searchKeywords is list
         )
       );
 
@@ -164,21 +170,24 @@ service cloud.firestore {
           "location",
           "createdAt",
           "updatedAt",
-          "isActive"
+          "isActive",
+          "searchKeywords"
         ])
         && request.resource.data.title is string
         && request.resource.data.price is number
         && request.resource.data.category is string
         && request.resource.data.youtubeUrl is string
         && request.resource.data.location is string
-        && request.resource.data.isActive == true;
+        && request.resource.data.isActive == true
+        && request.resource.data.searchKeywords is list;
 
       allow update: if signedIn()
         && (
           isAdmin() ||
           (resource.data.sellerId == request.auth.uid && isActive(request.auth.uid))
         )
-        && request.resource.data.sellerId == resource.data.sellerId;
+        && request.resource.data.sellerId == resource.data.sellerId
+        && request.resource.data.searchKeywords is list;
 
       allow delete: if signedIn()
         && (
@@ -203,21 +212,24 @@ service cloud.firestore {
           "location",
           "createdAt",
           "updatedAt",
-          "isActive"
+          "isActive",
+          "searchKeywords"
         ])
         && request.resource.data.title is string
         && request.resource.data.price is number
         && request.resource.data.category is string
         && request.resource.data.locationType is string
         && request.resource.data.location is string
-        && request.resource.data.isActive == true;
+        && request.resource.data.isActive == true
+        && request.resource.data.searchKeywords is list;
 
       allow update: if signedIn()
         && (
           isAdmin() ||
           (resource.data.providerId == request.auth.uid && isActive(request.auth.uid))
         )
-        && request.resource.data.providerId == resource.data.providerId;
+        && request.resource.data.providerId == resource.data.providerId
+        && request.resource.data.searchKeywords is list;
 
       allow delete: if signedIn()
         && (
